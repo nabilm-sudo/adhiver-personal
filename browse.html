@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adhiver — Homepage Archive</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 24px; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; color: #fff; }
+  .subtitle { color: #888; margin-bottom: 24px; font-size: 0.9rem; }
+  .filter { margin-bottom: 24px; }
+  .filter input { padding: 10px 16px; border-radius: 8px; border: 1px solid #333; background: #141414; color: #fff; font-size: 0.95rem; width: 300px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px; }
+  .card { background: #141414; border-radius: 12px; border: 1px solid #222; overflow: hidden; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; cursor: pointer; }
+  .card-header:hover { background: #1a1a1a; }
+  .card-header h2 { font-size: 1rem; font-weight: 600; }
+  .badge { background: #2a2a2a; color: #aaa; font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; }
+  .card-latest { cursor: pointer; padding: 0 18px 14px; position: relative; }
+  .card-latest img { width: 100%; border-radius: 8px; max-height: 300px; object-fit: cover; object-position: top; }
+  .card-latest .date { position: absolute; bottom: 22px; right: 26px; background: rgba(0,0,0,0.7); padding: 3px 10px; border-radius: 6px; font-size: 0.75rem; }
+  .history { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 0 18px 18px; }
+  .history-item { cursor: pointer; text-align: center; }
+  .history-item img { width: 100%; border-radius: 6px; max-height: 120px; object-fit: cover; object-position: top; }
+  .history-item span { font-size: 0.7rem; color: #888; }
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; justify-content: center; align-items: flex-start; padding: 40px; overflow: auto; }
+  .overlay.active { display: flex; }
+  .overlay img { max-width: 95%; border-radius: 8px; }
+  .overlay .close { position: fixed; top: 16px; right: 24px; color: #fff; font-size: 2rem; cursor: pointer; z-index: 101; }
+  .stats { display: flex; gap: 24px; margin-bottom: 24px; }
+  .stat { background: #141414; border: 1px solid #222; border-radius: 10px; padding: 14px 20px; }
+  .stat-val { font-size: 1.3rem; font-weight: 700; color: #fff; }
+  .stat-label { font-size: 0.75rem; color: #888; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <h1>Adhiver — Homepage Archive</h1>
+  <p class="subtitle">Updated 28 Apr 2026</p>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">3</div><div class="stat-label">Brands</div></div>
+    <div class="stat"><div class="stat-val">3</div><div class="stat-label">Captures</div></div>
+  </div>
+  <div class="filter"><input type="text" placeholder="Filter brands..." oninput="filterCards(this.value)"/></div>
+  <div class="grid" id="grid">
+        <div class="card">
+            <div class="card-header" onclick="toggle(this)">
+                <h2>nike.com</h2>
+                <span class="badge">1 capture</span>
+            </div>
+            <div class="card-latest" onclick="showFull('captures/nike.com/2026-04-28/screenshot.png')">
+                <img src="captures/nike.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span class="date">2026-04-28</span>
+            </div>
+            <div class="history" style="display:none">
+            <div class="history-item" onclick="showFull('captures/nike.com/2026-04-28/screenshot.png')">
+                <img src="captures/nike.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span>2026-04-28</span>
+            </div></div>
+        </div>
+        <div class="card">
+            <div class="card-header" onclick="toggle(this)">
+                <h2>sephora.com</h2>
+                <span class="badge">1 capture</span>
+            </div>
+            <div class="card-latest" onclick="showFull('captures/sephora.com/2026-04-28/screenshot.png')">
+                <img src="captures/sephora.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span class="date">2026-04-28</span>
+            </div>
+            <div class="history" style="display:none">
+            <div class="history-item" onclick="showFull('captures/sephora.com/2026-04-28/screenshot.png')">
+                <img src="captures/sephora.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span>2026-04-28</span>
+            </div></div>
+        </div>
+        <div class="card">
+            <div class="card-header" onclick="toggle(this)">
+                <h2>zara.com</h2>
+                <span class="badge">1 capture</span>
+            </div>
+            <div class="card-latest" onclick="showFull('captures/zara.com/2026-04-28/screenshot.png')">
+                <img src="captures/zara.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span class="date">2026-04-28</span>
+            </div>
+            <div class="history" style="display:none">
+            <div class="history-item" onclick="showFull('captures/zara.com/2026-04-28/screenshot.png')">
+                <img src="captures/zara.com/2026-04-28/screenshot.png" loading="lazy"/>
+                <span>2026-04-28</span>
+            </div></div>
+        </div></div>
+  <div class="overlay" id="overlay" onclick="closeFull()">
+    <span class="close">&times;</span>
+    <img id="overlay-img" src=""/>
+  </div>
+  <script>
+    function toggle(el) {
+      const hist = el.parentElement.querySelector('.history');
+      hist.style.display = hist.style.display === 'none' ? 'grid' : 'none';
+    }
+    function showFull(src) {
+      document.getElementById('overlay-img').src = src;
+      document.getElementById('overlay').classList.add('active');
+    }
+    function closeFull() {
+      document.getElementById('overlay').classList.remove('active');
+    }
+    function filterCards(val) {
+      document.querySelectorAll('.card').forEach(c => {
+        c.style.display = c.querySelector('h2').textContent.toLowerCase().includes(val.toLowerCase()) ? '' : 'none';
+      });
+    }
+    document.addEventListener('keydown', e => { if(e.key==='Escape') closeFull(); });
+  </script>
+</body>
+</html>
