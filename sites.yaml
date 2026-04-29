@@ -2,5 +2,8 @@
   name: Nike
 - url: https://www.zara.com
   name: Zara
-- url: https://www.sephora.com
-  name: Sephora
+- url: https://ch.iqos.com/de
+  name: IQOS Switzerland
+- url: https://www.iqos.com/de/de/home.html?gr=false
+  name: IQOS Germany
+
