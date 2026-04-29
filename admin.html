@@ -20,8 +20,15 @@
   .site-row:last-child { border-bottom: none; }
   .site-name { font-weight: 600; min-width: 120px; }
   .site-url { color: #888; font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-edit { background: none; border: 1px solid #444; color: #60a5fa; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  .btn-edit:hover { background: #151525; }
   .btn-remove { background: none; border: 1px solid #444; color: #f87171; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
   .btn-remove:hover { background: #2a1515; }
+  .edit-row { display: flex; gap: 8px; padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+  .edit-row input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.85rem; }
+  .btn-ok { background: none; border: 1px solid #444; color: #22c55e; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  .btn-ok:hover { background: #152515; }
+  .btn-cancel { background: none; border: 1px solid #444; color: #aaa; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
   .add-form { display: flex; gap: 10px; margin-top: 16px; }
   .add-form input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.9rem; }
   .btn-add { padding: 10px 20px; border-radius: 8px; border: none; background: #22c55e; color: #fff; cursor: pointer; font-size: 0.9rem; }
@@ -30,7 +37,13 @@
   .btn-save:hover { background: #1d4ed8; }
   .btn-scrape { padding: 12px 28px; border-radius: 8px; border: none; background: #f59e0b; color: #000; cursor: pointer; font-size: 1rem; font-weight: 600; }
   .btn-scrape:hover { background: #d97706; }
-  .actions { margin-top: 20px; display: flex; gap: 10px; }
+  .btn-scrape:disabled { background: #555; color: #999; cursor: not-allowed; }
+  .actions { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+  .scrape-status { margin-top: 16px; padding: 14px 18px; border-radius: 10px; border: 1px solid #222; background: #141414; display: none; }
+  .scrape-status .status-icon { font-size: 1.1rem; margin-right: 8px; }
+  .scrape-status.running { border-color: #f59e0b; }
+  .scrape-status.success { border-color: #22c55e; }
+  .scrape-status.failed { border-color: #ef4444; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: #22c55e; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 0.9rem; display: none; z-index: 100; }
   .toast.error { background: #ef4444; }
   .hidden { display: none; }
@@ -65,8 +78,9 @@
 
   <div class="actions">
     <button class="btn-save" onclick="saveSites()">Save to GitHub</button>
-    <button class="btn-scrape" onclick="runScrape()">Run Scrape Now</button>
+    <button class="btn-scrape" id="btn-scrape" onclick="runScrape()">Run Scrape Now</button>
   </div>
+  <div class="scrape-status" id="scrape-status"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -75,6 +89,8 @@
 const REPO = "adhiver-personal";
 let sites = [];
 let fileSha = "";
+let editingIndex = -1;
+let pollTimer = null;
 
 function getHeaders() {
   return {
@@ -82,7 +98,6 @@ function getHeaders() {
     "Accept": "application/vnd.github.v3+json"
   };
 }
-
 function getUser() { return localStorage.getItem("gh_user"); }
 
 function toast(msg, isError) {
@@ -91,6 +106,14 @@ function toast(msg, isError) {
   t.className = "toast" + (isError ? " error" : "");
   t.style.display = "block";
   setTimeout(() => t.style.display = "none", 3000);
+}
+
+function setStatus(msg, state) {
+  const el = document.getElementById("scrape-status");
+  const icons = { running: "⏳", success: "✅", failed: "❌" };
+  el.innerHTML = `<span class="status-icon">${icons[state]||""}</span>${msg}`;
+  el.className = "scrape-status " + state;
+  el.style.display = "block";
 }
 
 async function connect() {
@@ -143,13 +166,42 @@ function toYaml(sites) {
 
 function renderSites() {
   const list = document.getElementById("site-list");
-  list.innerHTML = sites.map((s, i) => `
-    <div class="site-row">
+  list.innerHTML = sites.map((s, i) => {
+    if (i === editingIndex) {
+      return `<div class="edit-row">
+        <input id="edit-name" value="${s.name}"/>
+        <input id="edit-url" value="${s.url}"/>
+        <button class="btn-ok" onclick="saveEdit(${i})">OK</button>
+        <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
+      </div>`;
+    }
+    return `<div class="site-row">
       <span class="site-name">${s.name}</span>
       <span class="site-url">${s.url}</span>
+      <button class="btn-edit" onclick="startEdit(${i})">Edit</button>
       <button class="btn-remove" onclick="removeSite(${i})">Remove</button>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
+}
+
+function startEdit(i) {
+  editingIndex = i;
+  renderSites();
+}
+
+function saveEdit(i) {
+  const name = document.getElementById("edit-name").value.trim();
+  const url = document.getElementById("edit-url").value.trim();
+  if (!name || !url) { toast("Fill both fields", true); return; }
+  sites[i] = { name, url };
+  editingIndex = -1;
+  renderSites();
+  toast("Edited — click Save to push to GitHub");
+}
+
+function cancelEdit() {
+  editingIndex = -1;
+  renderSites();
 }
 
 function addSite() {
@@ -187,20 +239,53 @@ async function saveSites() {
 }
 
 async function runScrape() {
+  const btn = document.getElementById("btn-scrape");
   try {
+    btn.disabled = true;
+    btn.textContent = "Triggering…";
     const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/actions/workflows/daily.yml/dispatches`, {
       method: "POST",
       headers: { ...getHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ ref: "main" })
     });
     if (!res.ok) throw new Error("Trigger failed");
-    toast("Scrape triggered — check Actions tab in ~2 min");
+    setStatus("Scrape triggered — waiting for it to start…", "running");
+    setTimeout(() => pollStatus(), 5000);
   } catch(e) {
+    btn.disabled = false;
+    btn.textContent = "Run Scrape Now";
     toast("Trigger failed: " + e.message, true);
   }
 }
 
-// Auto-connect if saved
+async function pollStatus() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/actions/runs?per_page=1`, { headers: getHeaders() });
+    const data = await res.json();
+    const run = data.workflow_runs[0];
+    if (!run) return;
+
+    if (run.status === "completed") {
+      const btn = document.getElementById("btn-scrape");
+      btn.disabled = false;
+      btn.textContent = "Run Scrape Now";
+      if (run.conclusion === "success") {
+        const mins = Math.round((new Date(run.updated_at) - new Date(run.created_at)) / 60000);
+        setStatus(`Scrape completed successfully in ~${mins} min`, "success");
+      } else {
+        setStatus(`Scrape finished with status: ${run.conclusion}`, "failed");
+      }
+      return;
+    }
+
+    const elapsed = Math.round((Date.now() - new Date(run.created_at)) / 60000);
+    setStatus(`Scraping in progress… (${elapsed} min elapsed)`, "running");
+    setTimeout(() => pollStatus(), 10000);
+  } catch(e) {
+    setTimeout(() => pollStatus(), 15000);
+  }
+}
+
 if (localStorage.getItem("gh_token")) {
   document.getElementById("gh-user").value = localStorage.getItem("gh_user");
   document.getElementById("gh-token").value = localStorage.getItem("gh_token");
