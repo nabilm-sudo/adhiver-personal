@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adhiver — Admin</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 24px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; color: #fff; }
+  .subtitle { color: #888; margin-bottom: 24px; font-size: 0.9rem; }
+  .setup { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .setup label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 6px; }
+  .setup input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.9rem; margin-bottom: 14px; }
+  .setup button { padding: 10px 20px; border-radius: 8px; border: none; background: #2563eb; color: #fff; cursor: pointer; font-size: 0.9rem; }
+  .setup button:hover { background: #1d4ed8; }
+  .section { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .section h2 { font-size: 1.1rem; margin-bottom: 16px; }
+  .site-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+  .site-row:last-child { border-bottom: none; }
+  .site-name { font-weight: 600; min-width: 120px; }
+  .site-url { color: #888; font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-remove { background: none; border: 1px solid #444; color: #f87171; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  .btn-remove:hover { background: #2a1515; }
+  .add-form { display: flex; gap: 10px; margin-top: 16px; }
+  .add-form input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.9rem; }
+  .btn-add { padding: 10px 20px; border-radius: 8px; border: none; background: #22c55e; color: #fff; cursor: pointer; font-size: 0.9rem; }
+  .btn-add:hover { background: #16a34a; }
+  .btn-save { padding: 12px 28px; border-radius: 8px; border: none; background: #2563eb; color: #fff; cursor: pointer; font-size: 1rem; margin-right: 10px; }
+  .btn-save:hover { background: #1d4ed8; }
+  .btn-scrape { padding: 12px 28px; border-radius: 8px; border: none; background: #f59e0b; color: #000; cursor: pointer; font-size: 1rem; font-weight: 600; }
+  .btn-scrape:hover { background: #d97706; }
+  .actions { margin-top: 20px; display: flex; gap: 10px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #22c55e; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 0.9rem; display: none; z-index: 100; }
+  .toast.error { background: #ef4444; }
+  .hidden { display: none; }
+  .help { font-size: 0.8rem; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Adhiver — Admin</h1>
+<p class="subtitle">Manage your sites and trigger scraping</p>
+
+<div class="setup" id="setup">
+  <label>GitHub Username</label>
+  <input id="gh-user" placeholder="your-username"/>
+  <label>Personal Access Token (<a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=adhiver-admin" target="_blank" style="color:#60a5fa">create one here</a>)</label>
+  <input id="gh-token" type="password" placeholder="ghp_xxxxxxxxxxxx"/>
+  <p class="help">Needs <strong>repo</strong> and <strong>workflow</strong> scopes. Stored in your browser only.</p>
+  <br/>
+  <button onclick="connect()">Connect</button>
+</div>
+
+<div id="main" class="hidden">
+  <div class="section">
+    <h2>Sites</h2>
+    <div id="site-list"></div>
+    <div class="add-form">
+      <input id="new-name" placeholder="Brand name"/>
+      <input id="new-url" placeholder="https://www.example.com"/>
+      <button class="btn-add" onclick="addSite()">Add</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-save" onclick="saveSites()">Save to GitHub</button>
+    <button class="btn-scrape" onclick="runScrape()">Run Scrape Now</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const REPO = "adhiver-personal";
+let sites = [];
+let fileSha = "";
+
+function getHeaders() {
+  return {
+    "Authorization": "token " + localStorage.getItem("gh_token"),
+    "Accept": "application/vnd.github.v3+json"
+  };
+}
+
+function getUser() { return localStorage.getItem("gh_user"); }
+
+function toast(msg, isError) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast" + (isError ? " error" : "");
+  t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 3000);
+}
+
+async function connect() {
+  const user = document.getElementById("gh-user").value.trim();
+  const token = document.getElementById("gh-token").value.trim();
+  if (!user || !token) { toast("Fill both fields", true); return; }
+  localStorage.setItem("gh_user", user);
+  localStorage.setItem("gh_token", token);
+  await loadSites();
+}
+
+async function loadSites() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/contents/sites.yaml`, { headers: getHeaders() });
+    if (!res.ok) throw new Error("Cannot access repo");
+    const data = await res.json();
+    fileSha = data.sha;
+    const content = atob(data.content.replace(/\n/g, ""));
+    sites = parseYaml(content);
+    document.getElementById("setup").classList.add("hidden");
+    document.getElementById("main").classList.remove("hidden");
+    renderSites();
+    toast("Connected");
+  } catch(e) {
+    toast("Connection failed: " + e.message, true);
+  }
+}
+
+function parseYaml(text) {
+  const result = [];
+  const lines = text.split("\n");
+  let current = {};
+  for (const line of lines) {
+    const urlMatch = line.match(/^\s*-\s*url:\s*(.+)/);
+    const nameMatch = line.match(/^\s*name:\s*(.+)/);
+    if (urlMatch) {
+      if (current.url) result.push(current);
+      current = { url: urlMatch[1].trim() };
+    } else if (nameMatch) {
+      current.name = nameMatch[1].trim();
+    }
+  }
+  if (current.url) result.push(current);
+  return result;
+}
+
+function toYaml(sites) {
+  return sites.map(s => `- url: ${s.url}\n  name: ${s.name}`).join("\n") + "\n";
+}
+
+function renderSites() {
+  const list = document.getElementById("site-list");
+  list.innerHTML = sites.map((s, i) => `
+    <div class="site-row">
+      <span class="site-name">${s.name}</span>
+      <span class="site-url">${s.url}</span>
+      <button class="btn-remove" onclick="removeSite(${i})">Remove</button>
+    </div>
+  `).join("");
+}
+
+function addSite() {
+  const name = document.getElementById("new-name").value.trim();
+  const url = document.getElementById("new-url").value.trim();
+  if (!name || !url) { toast("Fill name and URL", true); return; }
+  sites.push({ url, name });
+  document.getElementById("new-name").value = "";
+  document.getElementById("new-url").value = "";
+  renderSites();
+  toast("Added — click Save to push to GitHub");
+}
+
+function removeSite(i) {
+  sites.splice(i, 1);
+  renderSites();
+  toast("Removed — click Save to push to GitHub");
+}
+
+async function saveSites() {
+  try {
+    const content = btoa(unescape(encodeURIComponent(toYaml(sites))));
+    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/contents/sites.yaml`, {
+      method: "PUT",
+      headers: { ...getHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "update sites.yaml", content, sha: fileSha })
+    });
+    if (!res.ok) throw new Error("Save failed");
+    const data = await res.json();
+    fileSha = data.content.sha;
+    toast("Saved to GitHub");
+  } catch(e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+async function runScrape() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/actions/workflows/daily.yml/dispatches`, {
+      method: "POST",
+      headers: { ...getHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: "main" })
+    });
+    if (!res.ok) throw new Error("Trigger failed");
+    toast("Scrape triggered — check Actions tab in ~2 min");
+  } catch(e) {
+    toast("Trigger failed: " + e.message, true);
+  }
+}
+
+// Auto-connect if saved
+if (localStorage.getItem("gh_token")) {
+  document.getElementById("gh-user").value = localStorage.getItem("gh_user");
+  document.getElementById("gh-token").value = localStorage.getItem("gh_token");
+  loadSites();
+}
+</script>
+</body>
+</html>
