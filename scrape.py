@@ -53,10 +53,13 @@ def scrape_site(browser, site, log_rows):
 
     try:
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        page.goto(url, wait_until="networkidle", timeout=30000)
+        try:
+            page.goto(url, wait_until="networkidle", timeout=15000)
+        except:
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
         dismiss_cookies(page)
         page.wait_for_timeout(2000)
-
         page.screenshot(path=os.path.join(out_dir, "screenshot.png"), full_page=True)
         html = page.content()
         with open(os.path.join(out_dir, "page.html"), "w", encoding="utf-8") as f:

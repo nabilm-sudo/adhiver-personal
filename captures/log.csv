@@ -2,3 +2,11 @@ date,name,domain,url,status,error
 2026-04-28,Nike,nike.com,https://www.nike.com,ok,
 2026-04-28,Zara,zara.com,https://www.zara.com,ok,
 2026-04-28,Sephora,sephora.com,https://www.sephora.com,ok,
+2026-04-29,Nike,nike.com,https://www.nike.com,ok,
+2026-04-29,Zara,zara.com,https://www.zara.com,ok,
+2026-04-29,IQOS Switzerland,ch.iqos.com,https://ch.iqos.com/de,ok,
+2026-04-29,IQOS Germany,iqos.com,https://www.iqos.com/de/de/home.html?gr=false,error,"Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to ""https://www.iqos.com/de/de/home.html?gr=false"", waiting until ""networkidle""
+"
+2026-04-29,IQOS Germany,iqos.com,https://www.iqos.com/de/de/home.html?gr=false,ok,
