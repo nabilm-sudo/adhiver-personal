@@ -1,4 +1,5 @@
 name: Daily Scrape
+
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -15,21 +16,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python -m playwright install --with-deps chromium
-      - run: python scrape.py
-      - run: python build_index.py
-      - name: Commit captures
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add captures/ browse.html
-          git diff --staged --quiet || git commit -m "captures $(date -u +%Y-%m-%d)"
-          git push  python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python -m playwright install --with-deps chromium
-      - run: python scrape.py
-      - run: python build_index.py
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run scraper
+        run: python scrape.py
+
+      - name: Build index
+        run: python build_index.py
+
       - name: Commit captures
         run: |
           git config user.name "github-actions"
