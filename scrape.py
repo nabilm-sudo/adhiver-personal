@@ -125,7 +125,10 @@ def scrape_site(browser, site, log_rows):
             if attempt < 2:
                 page.wait_for_timeout(1500)
 
-        page.wait_for_timeout(1000)
+        if site.get("local_only"):
+            page.wait_for_timeout(8000)
+        else:
+            page.wait_for_timeout(1000)
         page.screenshot(path=os.path.join(out_dir, "screenshot.png"), full_page=True)
         html = page.content()
         with open(os.path.join(out_dir, "page.html"), "w", encoding="utf-8") as f:
