@@ -359,6 +359,21 @@ async function loadCaptures() {
 async function deleteFiles(files) {
   for (var f = 0; f < files.length; f++) {
     var file = files[f];
+    // Fetch fresh SHA before each delete
+    var freshRes = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/" + file.path, { headers: getHeaders() });
+    if (!freshRes.ok) continue;
+    var freshData = await freshRes.json();
+    await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/" + file.path, {
+      method: "DELETE",
+      headers: Object.assign({}, getHeaders(), { "Content-Type": "application/json" }),
+      body: JSON.stringify({ message: "delete " + file.path, sha: freshData.sha })
+    });
+  }
+}
+
+async function deleteFiles(files) {
+  for (var f = 0; f < files.length; f++) {
+    var file = files[f];
     await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/" + file.path, {
       method: "DELETE",
       headers: Object.assign({}, getHeaders(), { "Content-Type": "application/json" }),
