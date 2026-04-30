@@ -144,7 +144,14 @@ def main():
 
     print(f"Scraping {len(sites)} sites — {TODAY}")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--no-sandbox",
+            ]
+        )
         for site in sites:
             scrape_site(browser, site, log_rows)
         browser.close()
