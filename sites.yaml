@@ -2,9 +2,11 @@
   name: Nike
 - url: https://www.zara.com
   name: Zara
+  local_only: true
 - url: https://ch.iqos.com/de
   name: IQOS Switzerland
 - url: https://www.iqos.com/de/de/home.html?gr=false
   name: IQOS Germany
 - url: https://www.rolex.com/fr-ch
   name: Rolex
+  local_only: true

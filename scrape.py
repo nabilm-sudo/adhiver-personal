@@ -95,6 +95,9 @@ def scrape_site(browser, site, log_rows):
     url = site["url"]
     name = site["name"]
     domain = url.replace("https://", "").replace("http://", "").split("/")[0].replace("www.", "")
+    if site.get("local_only") and os.environ.get("GITHUB_ACTIONS"):
+        print(f"  SKIP {name} — local only (blocked from CI)")
+        return
     out_dir = os.path.join(CAPTURE_DIR, domain, TODAY)
 
     if os.path.exists(out_dir):
