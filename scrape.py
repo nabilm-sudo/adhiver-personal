@@ -147,7 +147,8 @@ def main():
 
     print(f"Scraping {len(sites)} sites — {TODAY}")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        is_ci = os.environ.get("GITHUB_ACTIONS")
+        browser = p.chromium.launch(headless=True if is_ci else False)
         for site in sites:
             scrape_site(browser, site, log_rows)
         browser.close()
