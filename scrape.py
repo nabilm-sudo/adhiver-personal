@@ -3,22 +3,61 @@ import yaml
 import csv
 from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 
 CAPTURE_DIR = "captures"
 LOG_FILE = os.path.join(CAPTURE_DIR, "log.csv")
 TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 COOKIE_SELECTORS = [
+    # English
     "button:has-text('Accept all')",
     "button:has-text('Accept All')",
+    "button:has-text('Accept All Cookies')",
+    "button:has-text('Accept all cookies')",
+    "button:has-text('Accept Cookies')",
+    "button:has-text('Accept cookies')",
     "button:has-text('Accept')",
-    "button:has-text('OK')",
     "button:has-text('Agree')",
+    "button:has-text('Agree & Continue')",
+    "button:has-text('Allow all')",
+    "button:has-text('Allow All')",
+    "button:has-text('Allow all cookies')",
+    "button:has-text('OK')",
     "button:has-text('Got it')",
+    "button:has-text('I understand')",
+    "button:has-text('Continue')",
+    "button:has-text('Yes, I agree')",
+    # French
     "button:has-text('Tout accepter')",
+    "button:has-text('Accepter tout')",
     "button:has-text('Accepter')",
-    "[id*='accept']",
-    "[class*='accept']",
+    "button:has-text('Autoriser')",
+    "button:has-text('J\\'accepte')",
+    "button:has-text('Continuer')",
+    # German
+    "button:has-text('Alle akzeptieren')",
+    "button:has-text('Alle annehmen')",
+    "button:has-text('Akzeptieren')",
+    "button:has-text('Einverstanden')",
+    "button:has-text('Zustimmen')",
+    "button:has-text('Alles erlauben')",
+    # Generic selectors
+    "[id*='accept' i]",
+    "[id*='cookie' i][id*='accept' i]",
+    "[class*='accept' i]",
+    "[data-action='accept']",
+    "[aria-label*='accept' i]",
+    "[aria-label*='cookie' i][role='button']",
+    "#onetrust-accept-btn-handler",
+    ".onetrust-accept-btn-handler",
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "#didomi-notice-agree-button",
+    ".cc-accept",
+    ".cc-allow",
+    ".cookie-consent-accept",
+    "[data-testid='cookie-accept']",
+    "[data-cy='cookie-accept']",
 ]
 
 def load_sites():
@@ -26,12 +65,27 @@ def load_sites():
         return yaml.safe_load(f)
 
 def dismiss_cookies(page):
+    # Try main page first
+    if _try_dismiss(page):
+        return True
+    # Try inside iframes (many cookie banners live in iframes)
+    for frame in page.frames:
+        if frame == page.main_frame:
+            continue
+        try:
+            if _try_dismiss(frame):
+                return True
+        except:
+            continue
+    return False
+
+def _try_dismiss(context):
     for selector in COOKIE_SELECTORS:
         try:
-            btn = page.locator(selector).first
-            if btn.is_visible(timeout=1000):
+            btn = context.locator(selector).first
+            if btn.is_visible(timeout=500):
                 btn.click()
-                page.wait_for_timeout(500)
+                context.wait_for_timeout(500)
                 return True
         except:
             continue
@@ -53,13 +107,22 @@ def scrape_site(browser, site, log_rows):
 
     try:
         page = browser.new_page(viewport={"width": 1440, "height": 900})
+        stealth_sync(page)
         try:
             page.goto(url, wait_until="networkidle", timeout=15000)
         except:
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(3000)
-        dismiss_cookies(page)
-        page.wait_for_timeout(2000)
+
+        # Try dismissing cookies up to 3 times (some banners appear with delay)
+        for attempt in range(3):
+            if dismiss_cookies(page):
+                page.wait_for_timeout(1000)
+                break
+            if attempt < 2:
+                page.wait_for_timeout(1500)
+
+        page.wait_for_timeout(1000)
         page.screenshot(path=os.path.join(out_dir, "screenshot.png"), full_page=True)
         html = page.content()
         with open(os.path.join(out_dir, "page.html"), "w", encoding="utf-8") as f:
