@@ -44,6 +44,19 @@
   .scrape-status.running { border-color: #f59e0b; }
   .scrape-status.success { border-color: #22c55e; }
   .scrape-status.failed { border-color: #ef4444; }
+  .capture-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+  .capture-row:last-child { border-bottom: none; }
+  .capture-domain { font-size: 0.9rem; }
+  .capture-actions { display: flex; gap: 8px; }
+  .btn-delete { background: none; border: 1px solid #444; color: #f87171; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  .btn-delete:hover { background: #2a1515; }
+  .btn-delete:disabled { color: #555; border-color: #333; cursor: not-allowed; }
+  .btn-delete-all { padding: 8px 18px; border-radius: 8px; border: none; background: #ef4444; color: #fff; cursor: pointer; font-size: 0.85rem; margin-top: 12px; }
+  .btn-delete-all:hover { background: #dc2626; }
+  .btn-delete-all:disabled { background: #555; cursor: not-allowed; }
+  .btn-refresh { background: none; border: 1px solid #444; color: #60a5fa; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-left: 10px; }
+  .date-picker { padding: 8px 12px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.85rem; margin-left: 10px; }
+  .empty-msg { color: #555; font-size: 0.85rem; padding: 10px 0; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: #22c55e; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 0.9rem; display: none; z-index: 100; }
   .toast.error { background: #ef4444; }
   .hidden { display: none; }
@@ -81,6 +94,18 @@
     <button class="btn-scrape" id="btn-scrape" onclick="runScrape()">Run Scrape Now</button>
   </div>
   <div class="scrape-status" id="scrape-status"></div>
+
+  <div class="section" style="margin-top:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <h2 style="margin-bottom:0">Captures</h2>
+      <div>
+        <input type="date" id="capture-date" class="date-picker" onchange="loadCaptures()"/>
+        <button class="btn-refresh" onclick="loadCaptures()">Refresh</button>
+      </div>
+    </div>
+    <div id="capture-list" style="margin-top:14px"></div>
+    <button class="btn-delete-all" id="btn-delete-all" onclick="deleteAllCaptures()" style="display:none">Delete all captures for this date</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -90,7 +115,7 @@ const REPO = "adhiver-personal";
 let sites = [];
 let fileSha = "";
 let editingIndex = -1;
-let pollTimer = null;
+let captureFiles = [];
 
 function getHeaders() {
   return {
@@ -111,9 +136,13 @@ function toast(msg, isError) {
 function setStatus(msg, state) {
   const el = document.getElementById("scrape-status");
   const icons = { running: "⏳", success: "✅", failed: "❌" };
-  el.innerHTML = `<span class="status-icon">${icons[state]||""}</span>${msg}`;
+  el.innerHTML = '<span class="status-icon">' + (icons[state]||"") + '</span>' + msg;
   el.className = "scrape-status " + state;
   el.style.display = "block";
+}
+
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 async function connect() {
@@ -127,7 +156,7 @@ async function connect() {
 
 async function loadSites() {
   try {
-    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/contents/sites.yaml`, { headers: getHeaders() });
+    const res = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/sites.yaml", { headers: getHeaders() });
     if (!res.ok) throw new Error("Cannot access repo");
     const data = await res.json();
     fileSha = data.sha;
@@ -135,7 +164,9 @@ async function loadSites() {
     sites = parseYaml(content);
     document.getElementById("setup").classList.add("hidden");
     document.getElementById("main").classList.remove("hidden");
+    document.getElementById("capture-date").value = todayUTC();
     renderSites();
+    loadCaptures();
     toast("Connected");
   } catch(e) {
     toast("Connection failed: " + e.message, true);
@@ -161,54 +192,46 @@ function parseYaml(text) {
 }
 
 function toYaml(sites) {
-  return sites.map(s => `- url: ${s.url}\n  name: ${s.name}`).join("\n") + "\n";
+  return sites.map(function(s) { return "- url: " + s.url + "\n  name: " + s.name; }).join("\n") + "\n";
 }
 
 function renderSites() {
-  const list = document.getElementById("site-list");
-  list.innerHTML = sites.map((s, i) => {
+  var list = document.getElementById("site-list");
+  list.innerHTML = sites.map(function(s, i) {
     if (i === editingIndex) {
-      return `<div class="edit-row">
-        <input id="edit-name" value="${s.name}"/>
-        <input id="edit-url" value="${s.url}"/>
-        <button class="btn-ok" onclick="saveEdit(${i})">OK</button>
-        <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
-      </div>`;
+      return '<div class="edit-row">' +
+        '<input id="edit-name" value="' + s.name + '"/>' +
+        '<input id="edit-url" value="' + s.url + '"/>' +
+        '<button class="btn-ok" onclick="saveEdit(' + i + ')">OK</button>' +
+        '<button class="btn-cancel" onclick="cancelEdit()">Cancel</button>' +
+        '</div>';
     }
-    return `<div class="site-row">
-      <span class="site-name">${s.name}</span>
-      <span class="site-url">${s.url}</span>
-      <button class="btn-edit" onclick="startEdit(${i})">Edit</button>
-      <button class="btn-remove" onclick="removeSite(${i})">Remove</button>
-    </div>`;
+    return '<div class="site-row">' +
+      '<span class="site-name">' + s.name + '</span>' +
+      '<span class="site-url">' + s.url + '</span>' +
+      '<button class="btn-edit" onclick="startEdit(' + i + ')">Edit</button>' +
+      '<button class="btn-remove" onclick="removeSite(' + i + ')">Remove</button>' +
+      '</div>';
   }).join("");
 }
 
-function startEdit(i) {
-  editingIndex = i;
-  renderSites();
-}
-
+function startEdit(i) { editingIndex = i; renderSites(); }
 function saveEdit(i) {
-  const name = document.getElementById("edit-name").value.trim();
-  const url = document.getElementById("edit-url").value.trim();
+  var name = document.getElementById("edit-name").value.trim();
+  var url = document.getElementById("edit-url").value.trim();
   if (!name || !url) { toast("Fill both fields", true); return; }
-  sites[i] = { name, url };
+  sites[i] = { name: name, url: url };
   editingIndex = -1;
   renderSites();
   toast("Edited — click Save to push to GitHub");
 }
-
-function cancelEdit() {
-  editingIndex = -1;
-  renderSites();
-}
+function cancelEdit() { editingIndex = -1; renderSites(); }
 
 function addSite() {
-  const name = document.getElementById("new-name").value.trim();
-  const url = document.getElementById("new-url").value.trim();
+  var name = document.getElementById("new-name").value.trim();
+  var url = document.getElementById("new-url").value.trim();
   if (!name || !url) { toast("Fill name and URL", true); return; }
-  sites.push({ url, name });
+  sites.push({ url: url, name: name });
   document.getElementById("new-name").value = "";
   document.getElementById("new-url").value = "";
   renderSites();
@@ -223,14 +246,14 @@ function removeSite(i) {
 
 async function saveSites() {
   try {
-    const content = btoa(unescape(encodeURIComponent(toYaml(sites))));
-    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/contents/sites.yaml`, {
+    var content = btoa(unescape(encodeURIComponent(toYaml(sites))));
+    var res = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/sites.yaml", {
       method: "PUT",
-      headers: { ...getHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "update sites.yaml", content, sha: fileSha })
+      headers: Object.assign({}, getHeaders(), { "Content-Type": "application/json" }),
+      body: JSON.stringify({ message: "update sites.yaml", content: content, sha: fileSha })
     });
     if (!res.ok) throw new Error("Save failed");
-    const data = await res.json();
+    var data = await res.json();
     fileSha = data.content.sha;
     toast("Saved to GitHub");
   } catch(e) {
@@ -239,18 +262,18 @@ async function saveSites() {
 }
 
 async function runScrape() {
-  const btn = document.getElementById("btn-scrape");
+  var btn = document.getElementById("btn-scrape");
   try {
     btn.disabled = true;
     btn.textContent = "Triggering…";
-    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/actions/workflows/daily.yml/dispatches`, {
+    var res = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/actions/workflows/daily.yml/dispatches", {
       method: "POST",
-      headers: { ...getHeaders(), "Content-Type": "application/json" },
+      headers: Object.assign({}, getHeaders(), { "Content-Type": "application/json" }),
       body: JSON.stringify({ ref: "main" })
     });
     if (!res.ok) throw new Error("Trigger failed");
     setStatus("Scrape triggered — waiting for it to start…", "running");
-    setTimeout(() => pollStatus(), 5000);
+    setTimeout(function() { pollStatus(); }, 5000);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = "Run Scrape Now";
@@ -260,32 +283,126 @@ async function runScrape() {
 
 async function pollStatus() {
   try {
-    const res = await fetch(`https://api.github.com/repos/${getUser()}/${REPO}/actions/runs?per_page=1`, { headers: getHeaders() });
-    const data = await res.json();
-    const run = data.workflow_runs[0];
+    var res = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/actions/runs?per_page=1", { headers: getHeaders() });
+    var data = await res.json();
+    var run = data.workflow_runs[0];
     if (!run) return;
-
     if (run.status === "completed") {
-      const btn = document.getElementById("btn-scrape");
+      var btn = document.getElementById("btn-scrape");
       btn.disabled = false;
       btn.textContent = "Run Scrape Now";
       if (run.conclusion === "success") {
-        const mins = Math.round((new Date(run.updated_at) - new Date(run.created_at)) / 60000);
-        setStatus(`Scrape completed successfully in ~${mins} min`, "success");
+        var mins = Math.round((new Date(run.updated_at) - new Date(run.created_at)) / 60000);
+        setStatus("Scrape completed successfully in ~" + mins + " min", "success");
+        loadCaptures();
       } else {
-        setStatus(`Scrape finished with status: ${run.conclusion}`, "failed");
+        setStatus("Scrape finished with status: " + run.conclusion, "failed");
       }
       return;
     }
-
-    const elapsed = Math.round((Date.now() - new Date(run.created_at)) / 60000);
-    setStatus(`Scraping in progress… (${elapsed} min elapsed)`, "running");
-    setTimeout(() => pollStatus(), 10000);
+    var elapsed = Math.round((Date.now() - new Date(run.created_at)) / 60000);
+    setStatus("Scraping in progress… (" + elapsed + " min elapsed)", "running");
+    setTimeout(function() { pollStatus(); }, 10000);
   } catch(e) {
-    setTimeout(() => pollStatus(), 15000);
+    setTimeout(function() { pollStatus(); }, 15000);
   }
 }
 
+// --- Captures management ---
+
+async function loadCaptures() {
+  var date = document.getElementById("capture-date").value;
+  var list = document.getElementById("capture-list");
+  var btnAll = document.getElementById("btn-delete-all");
+  list.innerHTML = '<div class="empty-msg">Loading…</div>';
+  btnAll.style.display = "none";
+  captureFiles = [];
+
+  try {
+    // Get captures directory listing
+    var res = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/captures", { headers: getHeaders() });
+    if (!res.ok) { list.innerHTML = '<div class="empty-msg">No captures folder found</div>'; return; }
+    var domains = await res.json();
+
+    var found = [];
+    for (var d = 0; d < domains.length; d++) {
+      if (domains[d].type !== "dir") continue;
+      var domain = domains[d].name;
+      // Check if this domain has a folder for the selected date
+      try {
+        var dateRes = await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/captures/" + domain + "/" + date, { headers: getHeaders() });
+        if (!dateRes.ok) continue;
+        var files = await dateRes.json();
+        found.push({ domain: domain, files: files });
+      } catch(e) { continue; }
+    }
+
+    if (found.length === 0) {
+      list.innerHTML = '<div class="empty-msg">No captures for ' + date + '</div>';
+      return;
+    }
+
+    captureFiles = found;
+    list.innerHTML = found.map(function(item, i) {
+      return '<div class="capture-row">' +
+        '<span class="capture-domain">' + item.domain + ' <span style="color:#555;font-size:0.8rem">(' + item.files.length + ' files)</span></span>' +
+        '<div class="capture-actions">' +
+        '<button class="btn-delete" onclick="deleteCapture(' + i + ', this)">Delete</button>' +
+        '</div></div>';
+    }).join("");
+    btnAll.style.display = "block";
+  } catch(e) {
+    list.innerHTML = '<div class="empty-msg">Error loading captures</div>';
+  }
+}
+
+async function deleteFiles(files) {
+  for (var f = 0; f < files.length; f++) {
+    var file = files[f];
+    await fetch("https://api.github.com/repos/" + getUser() + "/" + REPO + "/contents/" + file.path, {
+      method: "DELETE",
+      headers: Object.assign({}, getHeaders(), { "Content-Type": "application/json" }),
+      body: JSON.stringify({ message: "delete " + file.path, sha: file.sha })
+    });
+  }
+}
+
+async function deleteCapture(index, btn) {
+  var item = captureFiles[index];
+  if (!confirm("Delete all captures for " + item.domain + " on this date?")) return;
+  btn.disabled = true;
+  btn.textContent = "Deleting…";
+  try {
+    await deleteFiles(item.files);
+    toast(item.domain + " captures deleted");
+    loadCaptures();
+  } catch(e) {
+    toast("Delete failed: " + e.message, true);
+    btn.disabled = false;
+    btn.textContent = "Delete";
+  }
+}
+
+async function deleteAllCaptures() {
+  var date = document.getElementById("capture-date").value;
+  if (!confirm("Delete ALL captures for " + date + "? This cannot be undone.")) return;
+  var btn = document.getElementById("btn-delete-all");
+  btn.disabled = true;
+  btn.textContent = "Deleting all…";
+  try {
+    for (var i = 0; i < captureFiles.length; i++) {
+      await deleteFiles(captureFiles[i].files);
+    }
+    toast("All captures for " + date + " deleted");
+    loadCaptures();
+  } catch(e) {
+    toast("Delete failed: " + e.message, true);
+  }
+  btn.disabled = false;
+  btn.textContent = "Delete all captures for this date";
+}
+
+// Auto-connect
 if (localStorage.getItem("gh_token")) {
   document.getElementById("gh-user").value = localStorage.getItem("gh_user");
   document.getElementById("gh-token").value = localStorage.getItem("gh_token");
