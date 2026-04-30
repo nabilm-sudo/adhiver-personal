@@ -125,10 +125,38 @@ def scrape_site(browser, site, log_rows):
             if attempt < 2:
                 page.wait_for_timeout(1500)
 
+        # Scroll down and back up to trigger lazy-loaded content
+        page.evaluate("""
+            async () => {
+                const delay = ms => new Promise(r => setTimeout(r, ms));
+                for (let i = 0; i < document.body.scrollHeight; i += 400) {
+                    window.scrollTo(0, i);
+                    await delay(200);
+                }
+                window.scrollTo(0, 0);
+            }
+        """)
+
         if site.get("local_only"):
             page.wait_for_timeout(8000)
         else:
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(2000)
+
+        # Wait for images to load (5s max)
+        try:
+            page.evaluate("""
+                () => Promise.race([
+                    Promise.all(
+                        Array.from(document.images)
+                            .filter(img => !img.complete)
+                            .map(img => new Promise(r => { img.onload = img.onerror = r; }))
+                    ),
+                    new Promise(r => setTimeout(r, 5000))
+                ])
+            """, timeout=10000)
+        except:
+            pass
+
         page.screenshot(path=os.path.join(out_dir, "screenshot.png"), full_page=True)
         html = page.content()
         with open(os.path.join(out_dir, "page.html"), "w", encoding="utf-8") as f:
